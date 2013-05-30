@@ -35,6 +35,7 @@ const Gdm = imports.gi.Gdm;
 
 const Batch = imports.gdm.batch;
 const GdmUtil = imports.gdm.util;
+const Smartcard = imports.gdm.smartcard;
 const Main = imports.ui.main;
 const ModalDialog = imports.ui.modalDialog;
 const Tweener = imports.ui.tweener;
@@ -484,6 +485,7 @@ const LoginDialog = new Lang.Class({
 
         this._userManager = AccountsService.UserManager.get_default()
         this._greeterClient = new Gdm.Client();
+        this._smartcardManager = new Smartcard.SmartcardManager();
 
         if (GLib.getenv('GDM_GREETER_TEST') != '1') {
             this._greeter = this._greeterClient.get_greeter_sync(null);
