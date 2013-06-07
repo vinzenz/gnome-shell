@@ -14,11 +14,13 @@ const Main = imports.ui.main;
 const Params = imports.misc.params;
 const ShellEntry = imports.ui.shellEntry;
 const SmartcardManager = imports.misc.smartcardManager;
+const OVirt = imports.gdm.ovirt;
 const Tweener = imports.ui.tweener;
 
 const PASSWORD_SERVICE_NAME = 'gdm-password';
 const FINGERPRINT_SERVICE_NAME = 'gdm-fingerprint';
 const SMARTCARD_SERVICE_NAME = 'gdm-smartcard';
+const OVIRT_SERVICE_NAME = 'gdm-ovirtcred';
 const FADE_ANIMATION_TIME = 0.16;
 const CLONE_FADE_ANIMATION_TIME = 0.25;
 
@@ -133,6 +135,14 @@ const ShellUserVerifier = new Lang.Class({
 
         this._fprintManager = new Fprint.FprintManager();
         this._smartcardManager = SmartcardManager.getSmartcardManager();
+
+        this._ovirtAuthToken = null;
+        this._ovirtInterface = OVirt.OVirtCredentials();
+        this._ovirtInterface.connectSignal('UserAuthenticated',
+                                           function(proxy, senderName, [token]){
+            this._oVirtAuthToken = token;
+            this.begin(null, null);
+        })
 
         // We check for smartcards right away, since an inserted smartcard
         // at startup should result in immediately initiating authentication.
@@ -416,6 +426,10 @@ const ShellUserVerifier = new Lang.Class({
     },
 
     _beginVerification: function() {
+        if (this._ovirtAuthToken) {
+            this._startService(OVIRT_SERVICE_NAME);
+        }
+
         this._startService(this._getForegroundService());
 
         if (this._userName && this._haveFingerprintReader && !this.serviceIsForeground(FINGERPRINT_SERVICE_NAME))
@@ -444,8 +458,21 @@ const ShellUserVerifier = new Lang.Class({
         this._queueMessage(problem, MessageType.ERROR);
     },
 
+    _ovirtAnswerQuery: function(serviceName, question) {
+        if (this._ovirtAuthToken && serviceName == OVIRT_SERVICE_NAME
+                && question == 'Token?') {
+            this.answerQuery(serviceName, this._ovirtAuthToken);
+            this._ovirtAuthToken = null;
+            return true;
+        }
+        return false;
+    },
+
     _onInfoQuery: function(client, serviceName, question) {
         if (!this.serviceIsForeground(serviceName))
+            return;
+
+        if (this._ovirtAnswerQuery(serviceName, question))
             return;
 
         this.emit('ask-question', serviceName, question, '');
@@ -453,6 +480,9 @@ const ShellUserVerifier = new Lang.Class({
 
     _onSecretInfoQuery: function(client, serviceName, secretQuestion) {
         if (!this.serviceIsForeground(serviceName))
+            return;
+
+        if (this._ovirtAnswerQuery(serviceName, question))
             return;
 
         this.emit('ask-question', serviceName, secretQuestion, '\u25cf');
