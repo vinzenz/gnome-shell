@@ -54,6 +54,7 @@ const UnlockDialog = new Lang.Class({
         this._userVerifier.connect('verification-complete', Lang.bind(this, this._onVerificationComplete));
         this._userVerifier.connect('verification-failed', Lang.bind(this, this._onVerificationFailed));
         this._userVerifier.connect('reset', Lang.bind(this, this._onReset));
+        this._userVerifier.connect('ovirt-user-authenticated', Lang.bind(this, this._onOVirtUserAuthenticated));
 
         this._userVerifier.connect('show-login-hint', Lang.bind(this, this._showLoginHint));
         this._userVerifier.connect('hide-login-hint', Lang.bind(this, this._hideLoginHint));
@@ -143,6 +144,12 @@ const UnlockDialog = new Lang.Class({
         this._idleMonitor = new GnomeDesktop.IdleMonitor();
         this._idleWatchId = this._idleMonitor.add_idle_watch(IDLE_TIMEOUT * 1000, Lang.bind(this, this._escape));
     },
+
+    _onOVirtUserAuthenticated: function() {
+        let hold = new Batch.Hold();
+        this._userVerifier.begin(this._userName, hold);
+    },
+
 
     _updateSensitivity: function(sensitive) {
         this._promptEntry.reactive = sensitive;

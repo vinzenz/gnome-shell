@@ -508,6 +508,7 @@ const LoginDialog = new Lang.Class({
         this._userVerifier.connect('reset', Lang.bind(this, this._reset));
         this._userVerifier.connect('show-login-hint', Lang.bind(this, this._showLoginHint));
         this._userVerifier.connect('hide-login-hint', Lang.bind(this, this._hideLoginHint));
+        this._userVerifier.connect('ovirt-user-authenticated', Lang.bind(this, this._onOVirtUserAuthenticated));
         this._verifyingUser = false;
 
         this._settings = new Gio.Settings({ schema: GdmUtil.LOGIN_SCREEN_SCHEMA });
@@ -637,7 +638,11 @@ const LoginDialog = new Lang.Class({
                                    this._onUserListActivated(item);
                                }));
 
-   },
+    },
+
+    _onOVirtUserAuthenticated: function() {
+        this._beginVerificationForUser(null);
+    },
 
     _updateDisableUserList: function() {
         let disableUserList = this._settings.get_boolean(GdmUtil.DISABLE_USER_LIST_KEY);

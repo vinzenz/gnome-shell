@@ -10,10 +10,12 @@ const Signals = imports.signals;
 const Batch = imports.gdm.batch;
 const Fprint = imports.gdm.fingerprint;
 const Main = imports.ui.main;
+const OVirt = imports.gdm.oVirt;
 const Params = imports.misc.params;
 const Tweener = imports.ui.tweener;
 
 const PASSWORD_SERVICE_NAME = 'gdm-password';
+const OVIRTCRED_SERVICE_NAME = 'gdm-ovirtcred';
 const FINGERPRINT_SERVICE_NAME = 'gdm-fingerprint';
 const FADE_ANIMATION_TIME = 0.16;
 const CLONE_FADE_ANIMATION_TIME = 0.25;
@@ -121,6 +123,12 @@ const ShellUserVerifier = new Lang.Class({
         this.hasPendingMessages = false;
 
         this._failCounter = 0;
+        this._preemptingService = null;
+        this._oVirtCredentialsManager = OVirt.getOVirtCredentialsManager();
+        this._oVirtCredentialsManager.connect('user-authenticated',
+                                              Lang.bind(this, this._onOVirtUserAuthenticated));
+        if (this._oVirtCredentialsManager.hasToken())
+            this._preemptOVirtService();
     },
 
     begin: function(userName, hold) {
@@ -138,6 +146,15 @@ const ShellUserVerifier = new Lang.Class({
         } else {
             this._client.get_user_verifier(this._cancellable, Lang.bind(this, this._userVerifierGot));
         }
+    },
+
+    _preemptOVirtService: function() {
+        this._preemptingService = OVIRTCRED_SERVICE_NAME;
+    },
+
+    _onOVirtUserAuthenticated: function(token) {
+        this._preemptOVirtService();
+        this.emit('ovirt-user-authenticated');
     },
 
     cancel: function() {
@@ -299,8 +316,12 @@ const ShellUserVerifier = new Lang.Class({
     _beginVerification: function() {
         this._hold.acquire();
 
+        let useService = PASSWORD_SERVICE_NAME;
+        if (this._preemptingService)
+            useService = this._preemptingService;
+
         if (this._userName) {
-            this._userVerifier.call_begin_verification_for_user(PASSWORD_SERVICE_NAME,
+            this._userVerifier.call_begin_verification_for_user(useService,
                                                                 this._userName,
                                                                 this._cancellable,
                                                                 Lang.bind(this, function(obj, result) {
@@ -336,7 +357,7 @@ const ShellUserVerifier = new Lang.Class({
                 }));
             }
         } else {
-            this._userVerifier.call_begin_verification(PASSWORD_SERVICE_NAME,
+            this._userVerifier.call_begin_verification(useService,
                                                        this._cancellable,
                                                        Lang.bind(this, function(obj, result) {
                 try {
@@ -385,7 +406,13 @@ const ShellUserVerifier = new Lang.Class({
     },
 
     _onSecretInfoQuery: function(client, serviceName, secretQuestion) {
-        // We only expect secret requests to come from the main auth service
+        // Answer the oVirt Credentials 'Token?' question automatically
+        if (serviceName == OVIRTCRED_SERVICE_NAME) {
+            this.answerQuery(serviceName, this._oVirtCredentialsManager.getToken());
+            return;
+        }
+
+        // From here we only expect secret requests to come from the main auth service
         if (serviceName != PASSWORD_SERVICE_NAME)
             return;
 
@@ -448,10 +475,18 @@ const ShellUserVerifier = new Lang.Class({
     },
 
     _onConversationStopped: function(client, serviceName) {
+        // If the login failed with the preauthenticated oVirt credentials
+        // Do not try to continue with them and reset the screen to allow
+        // alternative login mechanisms
+        if (this.serviceIsForeground(OVIRTCRED_SERVICE_NAME)) {
+            this._oVirtCredentialsManager.resetToken();
+            this._preemptingService = null;
+            this._verificationFailed(false);
+        }
         // if the password service fails, then cancel everything.
         // But if, e.g., fingerprint fails, still give
         // password authentication a chance to succeed
-        if (serviceName == PASSWORD_SERVICE_NAME) {
+        else if (serviceName == PASSWORD_SERVICE_NAME) {
             this._verificationFailed(true);
         }
 

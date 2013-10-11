@@ -25,6 +25,7 @@ const MessageTray = imports.ui.messageTray;
 const ShellDBus = imports.ui.shellDBus;
 const Tweener = imports.ui.tweener;
 const Util = imports.misc.util;
+const OVirt = imports.gdm.oVirt;
 
 const SCREENSAVER_SCHEMA = 'org.gnome.desktop.screensaver';
 const LOCK_ENABLED_KEY = 'lock-enabled';
@@ -538,6 +539,13 @@ const ScreenShield = new Lang.Class({
         this._lightbox.connect('shown', Lang.bind(this, this._onLightboxShown));
 
         this.idleMonitor = new GnomeDesktop.IdleMonitor();
+
+        this._oVirtCredentialsManager = OVirt.getOVirtCredentialsManager();
+        this._oVirtCredentialsManager.connect('user-authenticated',
+                                              Lang.bind(this, function(token) {
+                                                  if (this._isLocked)
+                                                      this._liftShield(true, 0);
+                                              }));
     },
 
     _createBackground: function(monitorIndex) {
